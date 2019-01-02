@@ -1,0 +1,91 @@
+<h3 id="spring-with-swagger-integration">Spring with Swagger Integration</h3>
+
+<p>The real problem you’ll encounter will be integrating with spring with swagger. I expect you’re using swagger for your microservice, because it’ll make you easily test your microservice REST API. Unfortunately,  there are two compatibility issues with the current (4.8.0) version of the BIRT with spring/swagger. The two packages <code class="highlighter-rouge">com.google.common</code>and <code class="highlighter-rouge">org.slf4j</code> are put into the jar package of the BIRT, instead of being a dependency. The versions in the BIRT jar are not compatible with spring’s current version which uses <code class="highlighter-rouge">net.logstash.logback</code>.  And it also not compatible with <code class="highlighter-rouge">springfox-spring-web</code>(2.9.2) version which uses <code class="highlighter-rouge">google.common</code> package.</p>
+
+<p>The easiest and a working way of solving this is to open the BIRT jar file with some archive editing software (ex. winrar) and deleting those directories from the jar file. That way, BIRT will use the ones which come with spring and swagger.</p>
+
+<p>This workaround needs another step which makes your service uses the modified jar file instead of the one that comes with gradle/maven. Your dependencies section in <code class="highlighter-rouge">build.gradle</code>file (or which gradle file you use) should look similar to this:</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">dependencies</span> <span class="o">{</span>
+   <span class="n">compile</span> <span class="n">springBoot</span>
+   <span class="n">compile</span> <span class="n">springCloud</span>
+   <span class="n">compile</span> <span class="n">swagger</span>
+   <span class="n">compile</span> <span class="n">logs</span>
+   <span class="n">compile</span> <span class="nf">fileTree</span><span class="o">(</span><span class="nl">dir:</span> <span class="s">"birt_runtime"</span><span class="o">,</span> <span class="nl">includes:</span> <span class="o">[</span><span class="err">'</span><span class="o">*.</span><span class="na">jar</span><span class="err">'</span><span class="o">])</span>   
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>Please notice that I’m using all the files in that folder (which includes all the <a href="https://download.eclipse.org/birt/downloads/">BIRT runtime jar files</a>), because as we’re using the jar file, the gradle system will not be resolving dependencies for it. So, we’re putting all the necessary files (which will also be needed in the runtime while creating the report )</p>
+
+<p>If you are also using <code class="highlighter-rouge">docker</code> for deployment, you should also not forget to add necessary steps to copy files to the docker image. A similar step is should look like:</p>
+
+<p><code class="highlighter-rouge">COPY ./birt_runtime/*.jar ./birt_runtime/</code></p>
+
+<p>And ( :) ) do not forget to somehow map that directory to your <code class="highlighter-rouge">EngineConfig</code> instance. To achieve that you can easily create an environment variable (as <code class="highlighter-rouge">BIRT_HOME</code>) and pass it to the <code class="highlighter-rouge">EngineConfig</code>instance:</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">EngineConfig</span> <span class="n">config</span> <span class="o">=</span> <span class="k">new</span> <span class="n">EngineConfig</span><span class="o">();</span>
+<span class="n">config</span><span class="o">.</span><span class="na">setBIRTHome</span><span class="o">(</span><span class="n">System</span><span class="o">.</span><span class="na">getenv</span><span class="o">(</span><span class="s">"BIRT_HOME"</span><span class="o">));</span>
+</code></pre></div></div>
+
+<p>Or you can use a static directory (like <code class="highlighter-rouge">"/birt_runtime"</code>).</p>
+
+<h3 id="getting-data-from-a-rest-api-data-source">Getting Data From a REST API Data Source</h3>
+
+<p>BIRT doesn’t support REST API Data Sources out of box. But you can get data from such endpoint using scripting. You use an <code class="highlighter-rouge">InputStreamReader</code> and a <code class="highlighter-rouge">BufferedReader</code> which gets data from the URL. After you get all data and accumulate into a <code class="highlighter-rouge">String</code>:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">var</span> <span class="nx">inStream</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">URL</span><span class="p">(</span><span class="s2">"http://pathtomyservice/restpath"</span><span class="p">).</span><span class="nx">openStream</span><span class="p">();</span>
+
+<span class="kd">var</span> <span class="nx">inStreamReader</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">InputStreamReader</span><span class="p">(</span><span class="nx">inStream</span><span class="p">);</span>
+<span class="kd">var</span> <span class="nx">bufferedReader</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">BufferedReader</span><span class="p">(</span><span class="nx">inStreamReader</span><span class="p">);</span>
+<span class="kd">var</span> <span class="nx">line</span><span class="p">;</span>
+<span class="kd">var</span> <span class="nx">result</span> <span class="o">=</span> <span class="s2">""</span><span class="p">;</span>
+
+<span class="k">while</span> <span class="p">((</span><span class="nx">line</span> <span class="o">=</span> <span class="nx">bufferedReader</span><span class="p">.</span><span class="nx">readLine</span><span class="p">())</span> <span class="o">!=</span> <span class="kc">null</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="nx">result</span> <span class="o">+=</span> <span class="nx">line</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="nx">inStream</span><span class="p">.</span><span class="nx">close</span><span class="p">();</span>
+</code></pre></div></div>
+
+<p>After that, you use <code class="highlighter-rouge">JSON.parse</code> method to parse the JSON string and have the JSON object. You can put the resulting object into an object and use it report-wide:</p>
+
+<p><code class="highlighter-rouge">jsonObject = JSON.parse(result);</code></p>
+
+<p>For all these work, you’ll also need to import packages in the beginning:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">importPackage</span><span class="p">(</span><span class="nb">Packages</span><span class="p">.</span><span class="nx">java</span><span class="p">.</span><span class="nx">io</span><span class="p">);</span>
+<span class="nx">importPackage</span><span class="p">(</span><span class="nb">Packages</span><span class="p">.</span><span class="nx">java</span><span class="p">.</span><span class="nx">net</span><span class="p">);</span>
+<span class="nx">importPackage</span><span class="p">(</span><span class="nb">Packages</span><span class="p">.</span><span class="nx">org</span><span class="p">.</span><span class="nx">apache</span><span class="p">.</span><span class="nx">commons</span><span class="p">.</span><span class="nx">io</span><span class="p">);</span>
+</code></pre></div></div>
+
+<h3 id="files-related-to-report">Files Related to Report</h3>
+
+<p>The report file may need some resources nearby it (like pictures, etc.). You have three options:</p>
+
+<ol>
+  <li>Embed resources into the report</li>
+  <li>Have the images as files in somehow nearby the report</li>
+  <li>Have the images loaded from a data source</li>
+</ol>
+
+<p>If you are using docker, you generally compile your entire application/service into one single jar and copy the jar to the image. For me, I couldn’t make the 1. option run with a single jar file. I chose to use the 2. option which is easy, indeed:</p>
+
+<ul>
+  <li>
+    <p>I’ve set an environment variable like <code class="highlighter-rouge">MY_REPORTS_DIR</code></p>
+  </li>
+  <li>
+    <p>I’ve put my reports as folders in that folder.</p>
+  </li>
+  <li>
+    <p>I used that env. variable in my code for getting the report design file:</p>
+
+    <div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">Resource</span> <span class="n">salesReportResource</span> <span class="o">=</span> <span class="k">new</span> <span class="n">FileSystemResource</span><span class="o">(</span><span class="n">System</span><span class="o">.</span><span class="na">getenv</span><span class="o">(</span><span class="s">"MY_REPORTS_DIR"</span><span class="o">)</span> <span class="o">+</span> <span class="s">"/salesreport/sales_report.rptdesign"</span><span class="o">);</span>
+<span class="n">IReportRunnable</span> <span class="n">design</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="na">openReportDesign</span><span class="o">(</span> <span class="n">salesReportResource</span><span class="o">.</span><span class="na">getInputStream</span><span class="o">()</span> <span class="o">);</span>
+</code></pre></div>    </div>
+  </li>
+</ul>
+
+<h3 id="fonts">Fonts</h3>
+
+<p>Be careful about the font you use. Be sure that the font you use in the report is installed on the nodes. For ex. if you are developing on windows but the microservice you’re creating (as usual) will run on a linux machine. The so common Arial font is not available on linux, so choose Helvetica instead. You can install <a href="apt:msttcorefonts">msttcorefonts</a> if you really want to have Microsoft fonts. Or you can utilize some .css files and use <code class="highlighter-rouge">font-family</code> <a href="https://www.w3schools.com/csSref/pr_font_font-family.asp">property</a> like web developers do, which will make the report choose among available fonts you’ve specified.</p>

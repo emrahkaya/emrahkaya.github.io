@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>BIRT Reporting</title>
+  <meta name="description" content="Spring with Swagger IntegrationThe real problem you’ll encounter will be integrating with spring with swagger. I expect you’re using swagger for your microse...">
+
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="canonical" href="https://github.com/emrahkaya/birt/spring/swagger/2019/01/02/BIRT-Reporting.html">
+  <link rel="alternate" type="application/rss+xml" title="Emrah's Blog" href="https://github.com/emrahkaya/feed.xml">
+</head>
+
+
+  <body>
+
+    <header class="site-header">
+
+  <div class="wrapper">
+
+    <a class="site-title" href="/">Emrah's Blog</a>
+
+    <nav class="site-nav">
+      <a href="#" class="menu-icon">
+        <svg viewBox="0 0 18 15">
+          <path fill="#424242" d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.031C17.335,0,18,0.665,18,1.484L18,1.484z"/>
+          <path fill="#424242" d="M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0c0-0.82,0.665-1.484,1.484-1.484 h15.031C17.335,6.031,18,6.696,18,7.516L18,7.516z"/>
+          <path fill="#424242" d="M18,13.516C18,14.335,17.335,15,16.516,15H1.484C0.665,15,0,14.335,0,13.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.031C17.335,12.031,18,12.696,18,13.516L18,13.516z"/>
+        </svg>
+      </a>
+
+      <div class="trigger">
+        
+          
+          <a class="page-link" href="/about/">About</a>
+          
+        
+          
+        
+          
+        
+          
+        
+      </div>
+    </nav>
+
+  </div>
+
+</header>
+
+
+    <div class="page-content">
+      <div class="wrapper">
+        <article class="post" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title" itemprop="name headline">BIRT Reporting</h1>
+    <p class="post-meta"><time datetime="2019-01-02T14:34:26+03:00" itemprop="datePublished">Jan 2, 2019</time></p>
+  </header>
+
+  <div class="post-content" itemprop="articleBody">
+    <h3 id="spring-with-swagger-integration">Spring with Swagger Integration</h3>
+
+<p>The real problem you’ll encounter will be integrating with spring with swagger. I expect you’re using swagger for your microservice, because it’ll make you easily test your microservice REST API. Unfortunately,  there are two compatibility issues with the current (4.8.0) version of the BIRT with spring/swagger. The two packages <code class="highlighter-rouge">com.google.common</code>and <code class="highlighter-rouge">org.slf4j</code> are put into the jar package of the BIRT, instead of being a dependency. The versions in the BIRT jar are not compatible with spring’s current version which uses <code class="highlighter-rouge">net.logstash.logback</code>.  And it also not compatible with <code class="highlighter-rouge">springfox-spring-web</code>(2.9.2) version which uses <code class="highlighter-rouge">google.common</code> package.</p>
+
+<p>The easiest and a working way of solving this is to open the BIRT jar file with some archive editing software (ex. winrar) and deleting those directories from the jar file. That way, BIRT will use the ones which come with spring and swagger.</p>
+
+<p>This workaround needs another step which makes your service uses the modified jar file instead of the one that comes with gradle/maven. Your dependencies section in <code class="highlighter-rouge">build.gradle</code>file (or which gradle file you use) should look similar to this:</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">dependencies</span> <span class="o">{</span>
+   <span class="n">compile</span> <span class="n">springBoot</span>
+   <span class="n">compile</span> <span class="n">springCloud</span>
+   <span class="n">compile</span> <span class="n">swagger</span>
+   <span class="n">compile</span> <span class="n">logs</span>
+   <span class="n">compile</span> <span class="nf">fileTree</span><span class="o">(</span><span class="nl">dir:</span> <span class="s">"birt_runtime"</span><span class="o">,</span> <span class="nl">includes:</span> <span class="o">[</span><span class="err">'</span><span class="o">*.</span><span class="na">jar</span><span class="err">'</span><span class="o">])</span>   
+<span class="o">}</span>
+</code></pre></div></div>
+
+<p>Please notice that I’m using all the files in that folder (which includes all the <a href="https://download.eclipse.org/birt/downloads/">BIRT runtime jar files</a>), because as we’re using the jar file, the gradle system will not be resolving dependencies for it. So, we’re putting all the necessary files (which will also be needed in the runtime while creating the report )</p>
+
+<p>If you are also using <code class="highlighter-rouge">docker</code> for deployment, you should also not forget to add necessary steps to copy files to the docker image. A similar step is should look like:</p>
+
+<p><code class="highlighter-rouge">COPY ./birt_runtime/*.jar ./birt_runtime/</code></p>
+
+<p>And ( :) ) do not forget to somehow map that directory to your <code class="highlighter-rouge">EngineConfig</code> instance. To achieve that you can easily create an environment variable (as <code class="highlighter-rouge">BIRT_HOME</code>) and pass it to the <code class="highlighter-rouge">EngineConfig</code>instance:</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">EngineConfig</span> <span class="n">config</span> <span class="o">=</span> <span class="k">new</span> <span class="n">EngineConfig</span><span class="o">();</span>
+<span class="n">config</span><span class="o">.</span><span class="na">setBIRTHome</span><span class="o">(</span><span class="n">System</span><span class="o">.</span><span class="na">getenv</span><span class="o">(</span><span class="s">"BIRT_HOME"</span><span class="o">));</span>
+</code></pre></div></div>
+
+<p>Or you can use a static directory (like <code class="highlighter-rouge">"/birt_runtime"</code>).</p>
+
+<h3 id="getting-data-from-a-rest-api-data-source">Getting Data From a REST API Data Source</h3>
+
+<p>BIRT doesn’t support REST API Data Sources out of box. But you can get data from such endpoint using scripting. You use an <code class="highlighter-rouge">InputStreamReader</code> and a <code class="highlighter-rouge">BufferedReader</code> which gets data from the URL. After you get all data and accumulate into a <code class="highlighter-rouge">String</code>:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kd">var</span> <span class="nx">inStream</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">URL</span><span class="p">(</span><span class="s2">"http://pathtomyservice/restpath"</span><span class="p">).</span><span class="nx">openStream</span><span class="p">();</span>
+
+<span class="kd">var</span> <span class="nx">inStreamReader</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">InputStreamReader</span><span class="p">(</span><span class="nx">inStream</span><span class="p">);</span>
+<span class="kd">var</span> <span class="nx">bufferedReader</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">BufferedReader</span><span class="p">(</span><span class="nx">inStreamReader</span><span class="p">);</span>
+<span class="kd">var</span> <span class="nx">line</span><span class="p">;</span>
+<span class="kd">var</span> <span class="nx">result</span> <span class="o">=</span> <span class="s2">""</span><span class="p">;</span>
+
+<span class="k">while</span> <span class="p">((</span><span class="nx">line</span> <span class="o">=</span> <span class="nx">bufferedReader</span><span class="p">.</span><span class="nx">readLine</span><span class="p">())</span> <span class="o">!=</span> <span class="kc">null</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="nx">result</span> <span class="o">+=</span> <span class="nx">line</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="nx">inStream</span><span class="p">.</span><span class="nx">close</span><span class="p">();</span>
+</code></pre></div></div>
+
+<p>After that, you use <code class="highlighter-rouge">JSON.parse</code> method to parse the JSON string and have the JSON object. You can put the resulting object into an object and use it report-wide:</p>
+
+<p><code class="highlighter-rouge">jsonObject = JSON.parse(result);</code></p>
+
+<p>For all these work, you’ll also need to import packages in the beginning:</p>
+
+<div class="language-javascript highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">importPackage</span><span class="p">(</span><span class="nb">Packages</span><span class="p">.</span><span class="nx">java</span><span class="p">.</span><span class="nx">io</span><span class="p">);</span>
+<span class="nx">importPackage</span><span class="p">(</span><span class="nb">Packages</span><span class="p">.</span><span class="nx">java</span><span class="p">.</span><span class="nx">net</span><span class="p">);</span>
+<span class="nx">importPackage</span><span class="p">(</span><span class="nb">Packages</span><span class="p">.</span><span class="nx">org</span><span class="p">.</span><span class="nx">apache</span><span class="p">.</span><span class="nx">commons</span><span class="p">.</span><span class="nx">io</span><span class="p">);</span>
+</code></pre></div></div>
+
+<h3 id="files-related-to-report">Files Related to Report</h3>
+
+<p>The report file may need some resources nearby it (like pictures, etc.). You have three options:</p>
+
+<ol>
+  <li>Embed resources into the report</li>
+  <li>Have the images as files in somehow nearby the report</li>
+  <li>Have the images loaded from a data source</li>
+</ol>
+
+<p>If you are using docker, you generally compile your entire application/service into one single jar and copy the jar to the image. For me, I couldn’t make the 1. option run with a single jar file. I chose to use the 2. option which is easy, indeed:</p>
+
+<ul>
+  <li>
+    <p>I’ve set an environment variable like <code class="highlighter-rouge">MY_REPORTS_DIR</code></p>
+  </li>
+  <li>
+    <p>I’ve put my reports as folders in that folder.</p>
+  </li>
+  <li>
+    <p>I used that env. variable in my code for getting the report design file:</p>
+
+    <div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">Resource</span> <span class="n">salesReportResource</span> <span class="o">=</span> <span class="k">new</span> <span class="n">FileSystemResource</span><span class="o">(</span><span class="n">System</span><span class="o">.</span><span class="na">getenv</span><span class="o">(</span><span class="s">"MY_REPORTS_DIR"</span><span class="o">)</span> <span class="o">+</span> <span class="s">"/salesreport/sales_report.rptdesign"</span><span class="o">);</span>
+<span class="n">IReportRunnable</span> <span class="n">design</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="na">openReportDesign</span><span class="o">(</span> <span class="n">salesReportResource</span><span class="o">.</span><span class="na">getInputStream</span><span class="o">()</span> <span class="o">);</span>
+</code></pre></div>    </div>
+  </li>
+</ul>
+
+<h3 id="fonts">Fonts</h3>
+
+<p>Be careful about the font you use. Be sure that the font you use in the report is installed on the nodes. For ex. if you are developing on windows but the microservice you’re creating (as usual) will run on a linux machine. The so common Arial font is not available on linux, so choose Helvetica instead. You can install <a href="apt:msttcorefonts">msttcorefonts</a> if you really want to have Microsoft fonts. Or you can utilize some .css files and use <code class="highlighter-rouge">font-family</code> <a href="https://www.w3schools.com/csSref/pr_font_font-family.asp">property</a> like web developers do, which will make the report choose among available fonts you’ve specified.</p>
+
+  </div>
+
+</article>
+
+      </div>
+    </div>
+
+    <footer class="site-footer">
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">Emrah's Blog</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li>Emrah's Blog</li>
+          <li><a href="mailto:emrah.kaya@deepnetwork.com">emrah.kaya@deepnetwork.com</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col footer-col-2">
+        <ul class="social-media-list">
+          
+          <li>
+            <a href="https://github.com/emrahkaya"><span class="icon icon--github"><svg viewBox="0 0 16 16"><path fill="#828282" d="M7.999,0.431c-4.285,0-7.76,3.474-7.76,7.761 c0,3.428,2.223,6.337,5.307,7.363c0.388,0.071,0.53-0.168,0.53-0.374c0-0.184-0.007-0.672-0.01-1.32 c-2.159,0.469-2.614-1.04-2.614-1.04c-0.353-0.896-0.862-1.135-0.862-1.135c-0.705-0.481,0.053-0.472,0.053-0.472 c0.779,0.055,1.189,0.8,1.189,0.8c0.692,1.186,1.816,0.843,2.258,0.645c0.071-0.502,0.271-0.843,0.493-1.037 C4.86,11.425,3.049,10.76,3.049,7.786c0-0.847,0.302-1.54,0.799-2.082C3.768,5.507,3.501,4.718,3.924,3.65 c0,0,0.652-0.209,2.134,0.796C6.677,4.273,7.34,4.187,8,4.184c0.659,0.003,1.323,0.089,1.943,0.261 c1.482-1.004,2.132-0.796,2.132-0.796c0.423,1.068,0.157,1.857,0.077,2.054c0.497,0.542,0.798,1.235,0.798,2.082 c0,2.981-1.814,3.637-3.543,3.829c0.279,0.24,0.527,0.713,0.527,1.437c0,1.037-0.01,1.874-0.01,2.129 c0,0.208,0.14,0.449,0.534,0.373c3.081-1.028,5.302-3.935,5.302-7.362C15.76,3.906,12.285,0.431,7.999,0.431z"/></svg>
+</span><span class="username">emrahkaya</span></a>
+
+          </li>
+          
+
+          
+        </ul>
+      </div>
+
+      <div class="footer-col footer-col-3">
+        <p>Sharing lessons learned.
+</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+
+
+  </body>
+
+</html>
